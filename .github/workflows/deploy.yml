@@ -7,6 +7,17 @@ on:
 
 jobs:
   build-and-deploy:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [status-dev, status-prod]
+    environment: ${{ matrix.target }}
+    env:
+      APP_HOST: ${{ vars.APP_HOST }}      
+      CLOUDFLARE_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -27,8 +38,8 @@ jobs:
       - name: Fetch Account ID
         id: fetch_account_id
         run: |
-          if [[ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]]; then
-            ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          if [[ -n "${{ env.CLOUDFLARE_ACCOUNT }}" ]]; then
+            ACCOUNT_ID="${{ env.CLOUDFLARE_ACCOUNT }}"
             echo "Using provided CLOUDFLARE_ACCOUNT_ID from secrets."
           else
             ACCOUNT_ID=$(curl -X GET "https://api.cloudflare.com/client/v4/accounts" -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type:application/json" | jq ".result[0].id" -r)
@@ -40,6 +51,7 @@ jobs:
           echo 'account_id='$ACCOUNT_ID >> $GITHUB_OUTPUT
 
         env:
+          CLOUDFLARE_ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Install packages
@@ -98,6 +110,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+          TF_VAR_APP_HOST: ${{ vars.APP_HOST }}
+          TF_VAR_DOMAIN: ${{ vars.DOMAIN }}
+          TF_VAR_SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           D1_ID: ${{ env.D1_ID }}
 
       # Currently Terraform Cloudflare provider doesn't support direct upload, use wrangler to upload instead.

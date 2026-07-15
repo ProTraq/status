@@ -16,6 +16,19 @@ variable "CLOUDFLARE_ACCOUNT_ID" {
   type = string
 }
 
+variable "APP_HOST" {
+  type = string
+}
+
+variable "DOMAIN" {
+  type = string
+}
+
+variable "SLACK_WEBHOOK_URL" {
+  type      = string
+  sensitive = true
+}
+
 variable "enable_do_migration" {
   type    = bool
   default = false
@@ -59,6 +72,18 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     name = "UPTIMEFLARE_D1"
     type = "d1"
     id   = cloudflare_d1_database.uptimeflare_d1.id
+    }, {
+    name = "APP_HOST"
+    type = "plain_text"
+    text = var.APP_HOST
+    }, {
+    name = "DOMAIN"
+    type = "plain_text"
+    text = var.DOMAIN
+    }, {
+    name = "SLACK_WEBHOOK_URL"
+    type = "secret_text"
+    text = var.SLACK_WEBHOOK_URL
   }]
 }
 
@@ -84,6 +109,20 @@ resource "cloudflare_pages_project" "uptimeflare" {
       d1_databases = {
         UPTIMEFLARE_D1 = {
           id = cloudflare_d1_database.uptimeflare_d1.id
+        }
+      }
+      env_vars = {
+        APP_HOST = {
+          type  = "plain_text"
+          value = var.APP_HOST
+        }
+        DOMAIN = {
+          type  = "plain_text"
+          value = var.DOMAIN
+        }
+        SLACK_WEBHOOK_URL = {
+          type  = "secret_text"
+          value = var.SLACK_WEBHOOK_URL
         }
       }
       compatibility_date  = "2025-04-02"
