@@ -10,7 +10,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [status-dev, status-prod]
+        include:
+          - target: status-dev
+            suffix: _dev
+          - target: status-prod
+            suffix: _prod
     environment: ${{ matrix.target }}
     env:
       APP_HOST: ${{ vars.APP_HOST }}      
@@ -76,6 +80,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
+          D1_NAME: uptimeflare_d1${{ matrix.suffix }}
 
       - name: Migrate state from KV (if needed)
         run: |
@@ -90,21 +95,24 @@ jobs:
         run: |
           terraform init
 
+          WORKER_NAME="uptimeflare_worker${{ matrix.suffix }}"
+          PAGES_NAME="uptimeflare${{ matrix.suffix }}"
+
           DO_RESP=$(curl "https://api.cloudflare.com/client/v4/accounts/$TF_VAR_CLOUDFLARE_ACCOUNT_ID/workers/durable_objects/namespaces?per_page=1000" \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
 
-          if echo "$DO_RESP" | jq -e '.result[] | select(.script == "uptimeflare_worker" and .class == "RemoteChecker")' > /dev/null; then
-            echo "Existing Durable Object namespace found for uptimeflare_worker RemoteChecker. No migration needed."
+          if echo "$DO_RESP" | jq -e --arg script "$WORKER_NAME" '.result[] | select(.script == $script and .class == "RemoteChecker")' > /dev/null; then
+            echo "Existing Durable Object namespace found for $WORKER_NAME RemoteChecker. No migration needed."
           else
-            echo "No existing Durable Object namespace found for uptimeflare_worker RemoteChecker. Need migration."
+            echo "No existing Durable Object namespace found for $WORKER_NAME RemoteChecker. Need migration."
             export TF_VAR_enable_do_migration=true
           fi
 
           echo "Try importing existing resources..."
           terraform import cloudflare_d1_database.uptimeflare_d1 "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$D1_ID"
-          terraform import cloudflare_workers_script.uptimeflare_worker "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Worker script import failed, continuing..."
-          terraform import cloudflare_workers_cron_trigger.uptimeflare_worker_cron "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare_worker" || echo "WARNING: Cron trigger import failed, continuing..."
-          terraform import cloudflare_pages_project.uptimeflare "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/uptimeflare" || echo "WARNING: Pages project import failed, continuing..."
+          terraform import cloudflare_workers_script.uptimeflare_worker "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$WORKER_NAME" || echo "WARNING: Worker script import failed, continuing..."
+          terraform import cloudflare_workers_cron_trigger.uptimeflare_worker_cron "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$WORKER_NAME" || echo "WARNING: Cron trigger import failed, continuing..."
+          terraform import cloudflare_pages_project.uptimeflare "$TF_VAR_CLOUDFLARE_ACCOUNT_ID/$PAGES_NAME" || echo "WARNING: Pages project import failed, continuing..."
 
           terraform apply -auto-approve -input=false
         env:
@@ -113,12 +121,13 @@ jobs:
           TF_VAR_APP_HOST: ${{ vars.APP_HOST }}
           TF_VAR_DOMAIN: ${{ vars.DOMAIN }}
           TF_VAR_SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TF_VAR_resource_suffix: ${{ matrix.suffix }}
           D1_ID: ${{ env.D1_ID }}
 
       # Currently Terraform Cloudflare provider doesn't support direct upload, use wrangler to upload instead.
       - name: Upload pages
         run: |
-          npx wrangler pages deploy .vercel/output/static --project-name uptimeflare
+          npx wrangler pages deploy .vercel/output/static --project-name "uptimeflare${{ matrix.suffix }}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.fetch_account_id.outputs.account_id }}
