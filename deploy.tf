@@ -101,7 +101,8 @@ resource "cloudflare_workers_cron_trigger" "uptimeflare_worker_cron" {
 
 resource "cloudflare_pages_project" "uptimeflare" {
   account_id        = var.CLOUDFLARE_ACCOUNT_ID
-  name              = "uptimeflare${var.resource_suffix}"
+  # Pages allows lowercase + dashes only (no underscores)
+  name              = "uptimeflare${replace(var.resource_suffix, "_", "-")}"
   production_branch = "main"
 
   deployment_configs = {
