@@ -354,6 +354,22 @@ export async function getStatus(
   return status
 }
 
+function formatProxyError(err: unknown): string {
+  let detail: string
+  if (err instanceof Error) {
+    detail = err.message ? `${err.name}: ${err.message}` : err.name
+  } else if (typeof err === 'string') {
+    detail = err
+  } else {
+    detail = String(err)
+  }
+  // Incident text is stored for 90 days; keep a placement/RPC failure readable.
+  if (detail.length > 300) {
+    detail = detail.slice(0, 300)
+  }
+  return `Check proxy error: ${detail}`
+}
+
 export async function doMonitor(monitor: MonitorTarget, defaultLocation: string, env: Env) {
   let checkLocation = defaultLocation
   let status
@@ -390,13 +406,13 @@ export async function doMonitor(monitor: MonitorTarget, defaultLocation: string,
       checkLocation = resp.location
       status = resp.status
     } catch (err) {
-      console.log(`[${monitor.id}] Error calling proxy: ${err}`)
+      const proxyError = formatProxyError(err)
+      console.log(`[${monitor.id}] Error calling proxy: ${proxyError}`)
       if (monitor.checkProxyFallback) {
         console.log('Falling back to local check...')
         status = await getStatus(monitor)
       } else {
-        // TODO: more consistent error handling (throw or return?)
-        status = { ping: 0, up: false, err: 'Unknown check proxy error' }
+        status = { ping: 0, up: false, err: proxyError }
       }
     }
   } else {
