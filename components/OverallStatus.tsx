@@ -91,12 +91,6 @@ export default function OverallStatus({
       <Title mt="sm" style={{ textAlign: 'center' }} order={1}>
         {statusString}
       </Title>
-      <Title mt="sm" style={{ textAlign: 'center', color: '#70778c' }} order={5}>
-        {t('Last updated on', {
-          date: new Date(state.lastUpdate * 1000).toLocaleString(),
-          seconds: currentTime - state.lastUpdate,
-        })}
-      </Title>
 
       {/* Upcoming Maintenance */}
       {upcomingMaintenances.length > 0 && (
