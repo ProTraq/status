@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers'
 import { MonitorTarget } from '../../types/config'
 import { workerConfig } from '../../uptime.config'
 import { doMonitor, getStatus } from './monitor'
+import { publishStatusProbes } from './publish'
 import { formatAndNotify, getWorkerLocation } from './util'
 import { CompactedMonitorStateWrapper, getFromStore, setToStore } from './store'
 import pLimit from 'p-limit'
@@ -9,6 +10,8 @@ import pLimit from 'p-limit'
 export interface Env {
   REMOTE_CHECKER_DO: DurableObjectNamespace<RemoteChecker>
   UPTIMEFLARE_D1: D1Database
+  STATUS_PROBE_INGEST_URL?: string
+  STATUS_PROBE_INGEST_TOKEN?: string
 }
 
 const Worker = {
@@ -36,6 +39,8 @@ const Worker = {
     for (const result of await Promise.all(checkQueue)) {
       checkResult[result.id] = result
     }
+
+    await publishStatusProbes(env, checkResult)
 
     // Update each monitor's state based on check results
     for (const monitor of workerConfig.monitors) {

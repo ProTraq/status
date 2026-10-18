@@ -29,6 +29,17 @@ variable "SLACK_WEBHOOK_URL" {
   sensitive = true
 }
 
+variable "STATUS_PROBE_INGEST_URL" {
+  type    = string
+  default = ""
+}
+
+variable "STATUS_PROBE_INGEST_TOKEN" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
 variable "enable_do_migration" {
   type    = bool
   default = false
@@ -36,6 +47,16 @@ variable "enable_do_migration" {
 
 variable "resource_suffix" {
   type = string
+}
+
+locals {
+  # infra/main publishes https://example.com/ until the Function URL exists.
+  status_probe_ingest_configured = (
+    var.STATUS_PROBE_INGEST_TOKEN != "" &&
+    var.STATUS_PROBE_INGEST_URL != "" &&
+    var.STATUS_PROBE_INGEST_URL != "https://example.com" &&
+    var.STATUS_PROBE_INGEST_URL != "https://example.com/"
+  )
 }
 
 resource "cloudflare_d1_database" "uptimeflare_d1" {
@@ -68,27 +89,58 @@ resource "cloudflare_workers_script" "uptimeflare_worker" {
     new_sqlite_classes = ["RemoteChecker"]
   } : null
 
-  bindings = [{
-    name       = "REMOTE_CHECKER_DO"
-    class_name = "RemoteChecker"
-    type       = "durable_object_namespace"
-    }, {
-    name = "UPTIMEFLARE_D1"
-    type = "d1"
-    id   = cloudflare_d1_database.uptimeflare_d1.id
-    }, {
-    name = "APP_HOST"
-    type = "plain_text"
-    text = var.APP_HOST
-    }, {
-    name = "DOMAIN"
-    type = "plain_text"
-    text = var.DOMAIN
-    }, {
-    name = "SLACK_WEBHOOK_URL"
-    type = "secret_text"
-    text = var.SLACK_WEBHOOK_URL
-  }]
+  bindings = concat([
+    {
+      name       = "REMOTE_CHECKER_DO"
+      class_name = "RemoteChecker"
+      type       = "durable_object_namespace"
+      id         = null
+      text       = null
+    },
+    {
+      name       = "UPTIMEFLARE_D1"
+      type       = "d1"
+      id         = cloudflare_d1_database.uptimeflare_d1.id
+      class_name = null
+      text       = null
+    },
+    {
+      name       = "APP_HOST"
+      type       = "plain_text"
+      text       = var.APP_HOST
+      class_name = null
+      id         = null
+    },
+    {
+      name       = "DOMAIN"
+      type       = "plain_text"
+      text       = var.DOMAIN
+      class_name = null
+      id         = null
+    },
+    {
+      name       = "SLACK_WEBHOOK_URL"
+      type       = "secret_text"
+      text       = var.SLACK_WEBHOOK_URL
+      class_name = null
+      id         = null
+    },
+    ], local.status_probe_ingest_configured ? [
+    {
+      name       = "STATUS_PROBE_INGEST_URL"
+      type       = "plain_text"
+      text       = var.STATUS_PROBE_INGEST_URL
+      class_name = null
+      id         = null
+    },
+    {
+      name       = "STATUS_PROBE_INGEST_TOKEN"
+      type       = "secret_text"
+      text       = var.STATUS_PROBE_INGEST_TOKEN
+      class_name = null
+      id         = null
+    },
+  ] : [])
 }
 
 resource "cloudflare_workers_cron_trigger" "uptimeflare_worker_cron" {

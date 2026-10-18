@@ -125,6 +125,8 @@ jobs:
           TF_VAR_APP_HOST: ${{ vars.APP_HOST }}
           TF_VAR_DOMAIN: ${{ vars.DOMAIN }}
           TF_VAR_SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TF_VAR_STATUS_PROBE_INGEST_URL: ${{ vars.STATUS_PROBE_INGEST_URL }}
+          TF_VAR_STATUS_PROBE_INGEST_TOKEN: ${{ secrets.STATUS_PROBE_INGEST_TOKEN }}
           TF_VAR_resource_suffix: ${{ matrix.suffix }}
           D1_ID: ${{ env.D1_ID }}
 
