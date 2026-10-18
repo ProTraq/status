@@ -2,6 +2,11 @@ import { Env } from '.'
 import { MonitorTarget } from '../../types/config'
 import { withTimeout, fetchTimeout } from './util'
 
+/** Outer bound for a Durable Object RPC, past the origin fetch timeout. */
+function proxyRpcTimeout(monitor: MonitorTarget): number {
+  return (monitor.timeout ?? 10000) + 5000
+}
+
 function isIpAddress(hostname: string): boolean {
   // `URL.hostname` strips brackets for IPv6, so a `:` reliably indicates an IPv6 literal here.
   if (hostname.includes(':')) return true
@@ -385,10 +390,14 @@ export async function doMonitor(monitor: MonitorTarget, defaultLocation: string,
         const doStub = env.REMOTE_CHECKER_DO.get(doId, {
           locationHint: doLoc as DurableObjectLocationHint,
         })
-        resp = await doStub.getLocationAndStatus(monitor)
+        resp = await withTimeout(
+          proxyRpcTimeout(monitor),
+          doStub.getLocationAndStatus(monitor)
+        )
         try {
-          // Kill the DO instance after use, to avoid extra resource usage
-          await doStub.kill()
+          // Kill the DO instance after use, to avoid extra resource usage.
+          // The kill RPC throws by design; a stuck input gate must not pin the cron.
+          await withTimeout(3000, doStub.kill())
         } catch (err) {
           // An error here is expected, ignore it
         }

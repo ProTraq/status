@@ -3,7 +3,7 @@ import { MonitorTarget } from '../../types/config'
 import { workerConfig } from '../../uptime.config'
 import { doMonitor, getStatus } from './monitor'
 import { publishStatusProbes } from './publish'
-import { formatAndNotify, getWorkerLocation } from './util'
+import { formatAndNotify, getWorkerLocation, withTimeout } from './util'
 import { CompactedMonitorStateWrapper, getFromStore, setToStore } from './store'
 import pLimit from 'p-limit'
 
@@ -16,11 +16,23 @@ export interface Env {
 
 const Worker = {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    console.log('Scheduled event started')
     const workerLocation = (await getWorkerLocation()) || 'ERROR'
     console.log(`Running scheduled event on ${workerLocation}...`)
 
+    // A hung D1 read must not block the probe publish. Skipping the write
+    // keeps the previous status-page state instead of replacing it with empty.
+    let storedState: string | null = null
+    let stateReadable = true
+    try {
+      storedState = await withTimeout(8000, getFromStore(env, 'state'))
+    } catch (e) {
+      stateReadable = false
+      console.log('State read failed, probes will still be published: ' + e)
+    }
+
     // Create a wrapped MonitorState from stored compacted state
-    const state = new CompactedMonitorStateWrapper(await getFromStore(env, 'state'))
+    const state = new CompactedMonitorStateWrapper(stateReadable ? storedState : null)
     state.data.overallDown = 0
     state.data.overallUp = 0
 
@@ -241,14 +253,20 @@ const Worker = {
     )
     // Update state
     // Allow for a cooldown period before writing to storage
-    if (
+    if (!stateReadable) {
+      console.log('Skipping state update because the state read failed')
+    } else if (
       statusChanged ||
       currentTimeSecond - state.data.lastUpdate >=
         (workerConfig.kvWriteCooldownMinutes ?? 3) * 60 - 10 // Allow for 10 seconds of clock drift
     ) {
       console.log('Updating state...')
       state.data.lastUpdate = currentTimeSecond
-      await setToStore(env, 'state', state.getCompactedStateStr())
+      try {
+        await withTimeout(8000, setToStore(env, 'state', state.getCompactedStateStr()))
+      } catch (e) {
+        console.log('State write failed: ' + e)
+      }
     } else {
       console.log('Skipping state update due to cooldown period.')
     }

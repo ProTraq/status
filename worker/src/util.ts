@@ -2,11 +2,17 @@ import { MonitorTarget, WebhookConfig } from '../../types/config'
 import { maintenances, workerConfig } from '../../uptime.config'
 
 async function getWorkerLocation() {
-  const res = await fetch('https://cloudflare.com/cdn-cgi/trace')
-  const text = await res.text()
-
-  const colo = /^colo=(.*)$/m.exec(text)?.[1]
-  return colo
+  try {
+    // A stuck lookup must not keep the scheduled invocation open. Cloudflare
+    // skips later cron runs until the current one returns.
+    const res = await fetchTimeout('https://cloudflare.com/cdn-cgi/trace', 5000)
+    const text = await res.text()
+    const colo = /^colo=(.*)$/m.exec(text)?.[1]
+    return colo
+  } catch (e) {
+    console.log('Worker location lookup failed: ' + e)
+    return undefined
+  }
 }
 
 const fetchTimeout = (
