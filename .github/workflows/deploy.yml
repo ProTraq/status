@@ -72,6 +72,9 @@ jobs:
       - name: Build page
         run: |
           npx @cloudflare/next-on-pages
+        env:
+          # Baked into the client bundle. The dev status page shows response times; production does not.
+          NEXT_PUBLIC_SHOW_RESPONSE_TIMES: ${{ matrix.target == 'status-dev' && 'true' || 'false' }}
 
       - name: Create D1 database and tables
         run: |

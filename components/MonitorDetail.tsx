@@ -98,9 +98,9 @@ export default function MonitorDetail({
       </div>
 
       <DetailBar monitor={monitor} state={state} />
-      {process.env.NODE_ENV === 'development' && !monitor.hideLatencyChart && (
-        <DetailChart monitor={monitor} state={state} />
-      )}
+      {(process.env.NEXT_PUBLIC_SHOW_RESPONSE_TIMES === 'true' ||
+        process.env.NODE_ENV === 'development') &&
+        !monitor.hideLatencyChart && <DetailChart monitor={monitor} state={state} />}
     </>
   )
 }
